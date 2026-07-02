@@ -138,7 +138,7 @@
       <span class="hint">スプシの1行目（列見出し）を貼ると、列を自動検出します</span>
     </div>
     <textarea id="header" spellcheck="false" aria-label="見出し行"></textarea>
-    <div class="ta-note">列は<b>見出しの名前</b>で探すので、頭に空列があっても（AE/AFのズレがあっても）自動で合わせます。自分のスプシの見出しに差し替えてOK。</div>
+    <div class="ta-note"><b>★必ず自分のスプシの1行目（見出し）に差し替えてください。</b>列数はシートごとに違いますが、列は名前で探すのでズレ（AE/AF等）は自動で合わせます。</div>
   </section>
 
   <!-- 2. templates -->
@@ -148,7 +148,7 @@
       <span class="hint">複製元の行を貼付（複数行=複数テンプレ、それぞれ全勤務地に展開）</span>
     </div>
     <textarea id="templates" spellcheck="false" aria-label="テンプレ原稿"></textarea>
-    <div class="ta-note">スプシで原稿の行を選択してコピー→ここに貼付（タブ区切りのまま貼れます）。</div>
+    <div class="ta-note">スプシで原稿の行を選択してコピー→ここに貼付。<b>仕事内容などセル内に改行がある原稿もそのまま貼ってOK</b>（自動で1原稿として認識します）。</div>
   </section>
 
   <!-- 3. locations -->
@@ -214,7 +214,8 @@
         <button class="ghost" id="download">.txt保存</button>
       </div>
     </div>
-    <textarea id="output" spellcheck="false" aria-label="出力" placeholder="生成した行がここに入ります（タブ区切り）。全選択してスプシに貼り付けてください。"></textarea>
+    <textarea id="output" spellcheck="false" aria-label="出力" placeholder="生成した行がここに入ります。「コピー」を押してスプシに貼り付けてください。"></textarea>
+    <div class="ta-note"><b>貼り戻しは「コピー」ボタンを使ってください。</b>改行セルもそのままスプシに入ります（下の枠を手動で選択してコピーすると改行で崩れることがあります）。</div>
   </section>
 
   <footer class="note">
@@ -335,15 +336,60 @@
     return { text:title, html:esc(title), replaced:false };
   }
 
-  function getTemplates(){
-    return $("templates").value.split(/\r?\n/).map(function(l){return l;}).filter(function(l){return l.trim()!=="";});
+  // quote-aware TSV parser: fields may be "..."-wrapped and contain tabs/newlines/"" 
+  function parseTSV(text){
+    text = String(text||"").replace(/\r\n/g,"\n").replace(/\r/g,"\n");
+    var rows=[], row=[], field="", inQ=false, i=0, n=text.length;
+    while(i<n){
+      var ch=text[i];
+      if(inQ){
+        if(ch==='"'){
+          if(text[i+1]==='"'){ field+='"'; i+=2; continue; }
+          inQ=false; i++; continue;
+        }
+        field+=ch; i++; continue;
+      }else{
+        if(ch==='"'){ inQ=true; i++; continue; }
+        if(ch==='\t'){ row.push(field); field=""; i++; continue; }
+        if(ch==='\n'){ row.push(field); rows.push(row); row=[]; field=""; i++; continue; }
+        field+=ch; i++; continue;
+      }
+    }
+    row.push(field); rows.push(row);
+    return rows;
   }
-  function getHeaderCells(){
-    var line = ($("header").value.split(/\r?\n/).filter(function(l){return l.trim()!=="";})[0])||"";
-    return line.split("\t");
+  function isBlankRow(r){ return r.every(function(c){return String(c).trim()==="";}); }
+
+  // quote a field for TSV output when it contains tab / newline / quote
+  function tsvField(v){
+    v = (v==null) ? "" : String(v);
+    return /[\t\n\r"]/.test(v) ? '"'+v.replace(/"/g,'""')+'"' : v;
+  }
+  function toTSVRow(cells){ return cells.map(tsvField).join("\t"); }
+
+  // HTML table for clipboard (so Google Sheets keeps line-break cells intact on paste)
+  function htmlCell(v){ return esc(v==null?"":String(v)).replace(/\n/g,"<br>"); }
+  function buildClipboardHTML(rows){
+    var s='<table>';
+    for(var i=0;i<rows.length;i++){
+      var r=rows[i];
+      s+='<tr>';
+      if(r===null){ s+='<td></td>'; }
+      else{ for(var j=0;j<r.length;j++){ s+='<td>'+htmlCell(r[j])+'</td>'; } }
+      s+='</tr>';
+    }
+    return s+'</table>';
   }
 
-  var lastOutput = "";
+  function getTemplates(){
+    return parseTSV($("templates").value).filter(function(r){ return !isBlankRow(r); });
+  }
+  function getHeaderCells(){
+    var rows = parseTSV($("header").value).filter(function(r){ return !isBlankRow(r); });
+    return rows.length ? rows[0] : [];
+  }
+
+  var lastOutputText = "", lastOutputHTML = "";
 
   function generate(){
     var headerCells = getHeaderCells();
@@ -386,24 +432,27 @@
     if(locs.length===0) warns.push("勤務地リストが空、または全行が読めませんでした。");
 
     // build rows
-    var outBlocks = [];
+    var outRows = [];            // array of cell-arrays; null = blank separator row
     var pv = [];
+    var emptyTitleCount = 0, titleTotal = 0;
     for(var t=0;t<templates.length;t++){
-      var baseCells = templates[t].split("\t");
-      if(idx.title>=0 && idx.title>=baseCells.length && doTitle) warns.push("テンプレ"+(t+1)+"行目：職種名の列位置("+colLetter(idx.title)+")までセルがありません。");
-      var blockLines = [];
+      var baseCells = templates[t];
+      if(t>0) outRows.push(null); // blank row between template groups
+      if(doTitle && idx.title>=0 && idx.title>=baseCells.length) warns.push("テンプレ"+(t+1)+"：職種名の列("+colLetter(idx.title)+")までセルがありません。見出し行のズレを確認してください。");
       for(var l=0;l<locs.length;l++){
         var cells = baseCells.slice();
         while(cells.length < headerCells.length) cells.push("");
         var lo = locs[l];
-        var titleObj = {text: idx.title>=0?(cells[idx.title]||""):"", html: esc(idx.title>=0?(cells[idx.title]||""):""), replaced:false};
+        var origTitle = idx.title>=0 ? (cells[idx.title]||"") : "";
+        if(doTitle && idx.title>=0){ titleTotal++; if(origTitle.trim()==="") emptyTitleCount++; }
+        var titleObj = {text:origTitle, html:esc(origTitle), replaced:false};
         if(doTitle && idx.title>=0){
           if(titleMode==="space"){
             var locText = lo.label || lo.loc;               // full 都道府県市区町村（3列目があれば優先）
-            titleObj = spaceTitle(cells[idx.title]||"", locText, titleSep);
+            titleObj = spaceTitle(origTitle, locText, titleSep);
           }else{
             var parenLabel = lo.label || lo.city || lo.loc; // 括弧内は市区町村ベース
-            titleObj = swapTitle(cells[idx.title]||"", parenLabel, appendIfNone);
+            titleObj = swapTitle(origTitle, parenLabel, appendIfNone);
           }
           cells[idx.title] = titleObj.text;
         }
@@ -412,7 +461,7 @@
         if(doCity && idx.city>=0 && lo.loc) cells[idx.city] = lo.city;
         if(doJis && idx.jis>=0 && lo.jis)   cells[idx.jis]  = lo.jis;
 
-        blockLines.push(cells.join("\t"));
+        outRows.push(cells);
         pv.push({
           t:t+1,
           titleHtml: (doTitle && idx.title>=0)? titleObj.html : esc(idx.title>=0?(cells[idx.title]||""):"—"),
@@ -424,17 +473,20 @@
           groupStart: (l===0)
         });
       }
-      outBlocks.push(blockLines.join("\n"));
     }
 
-    lastOutput = outBlocks.join("\n\n"); // blank line between template groups
-    $("output").value = lastOutput;
+    if(doTitle && idx.title>=0 && titleTotal>0 && emptyTitleCount===titleTotal){
+      warns.push("職種名の列が空でした。見出し行がこのシートのものか（列がズレていないか）確認してください。");
+    }
+
+    lastOutputText = outRows.map(function(r){ return r===null ? "" : toTSVRow(r); }).join("\n");
+    lastOutputHTML = buildClipboardHTML(outRows);
+    $("output").value = lastOutputText;
 
     renderWarns(warns);
     renderPreview(pv, doJis && idx.jis>=0);
 
-    var total = 0; for(var b=0;b<pv.length;b++) total++;
-    $("count").innerHTML = total>0 ? ("<b>"+total+"</b> 行を生成（テンプレ "+templates.length+" × 勤務地 "+locs.length+"）") : "";
+    $("count").innerHTML = pv.length>0 ? ("<b>"+pv.length+"</b> 行を生成（テンプレ "+templates.length+" × 勤務地 "+locs.length+"）") : "";
   }
 
   function renderMap(idx, on){
@@ -506,16 +558,32 @@
   $("run").addEventListener("click", generate);
 
   $("copy").addEventListener("click", function(){
-    var v = $("output").value;
-    if(!v){ toast("出力が空です"); return; }
-    if(navigator.clipboard && navigator.clipboard.writeText){
-      navigator.clipboard.writeText(v).then(function(){toast("コピーしました");},function(){fallbackCopy();});
-    }else{ fallbackCopy(); }
-    function fallbackCopy(){ $("output").select(); try{document.execCommand("copy");toast("コピーしました");}catch(e){toast("コピーできませんでした");} }
+    if(!lastOutputText){ toast("出力が空です"); return; }
+    var html = lastOutputHTML, plain = lastOutputText;
+    if(window.ClipboardItem && navigator.clipboard && navigator.clipboard.write){
+      try{
+        var item = new ClipboardItem({
+          "text/html": new Blob([html],{type:"text/html"}),
+          "text/plain": new Blob([plain],{type:"text/plain"})
+        });
+        navigator.clipboard.write([item]).then(
+          function(){ toast("コピーしました（スプシに貼れます）"); },
+          function(){ writePlain(); }
+        );
+        return;
+      }catch(e){ /* fall through */ }
+    }
+    writePlain();
+    function writePlain(){
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(plain).then(function(){toast("コピーしました");},function(){selCopy();});
+      }else{ selCopy(); }
+    }
+    function selCopy(){ $("output").select(); try{document.execCommand("copy");toast("コピーしました");}catch(e){toast("コピーできませんでした");} }
   });
 
   $("download").addEventListener("click", function(){
-    var v=$("output").value; if(!v){toast("出力が空です");return;}
+    var v=lastOutputText; if(!v){toast("出力が空です");return;}
     var d=new Date();
     var ymd=d.getFullYear()+String(d.getMonth()+1).padStart(2,"0")+String(d.getDate()).padStart(2,"0");
     var blob=new Blob([v],{type:"text/plain;charset=utf-8"});
