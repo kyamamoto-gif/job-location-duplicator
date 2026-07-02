@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>原稿複製ツール｜勤務地差し替え</title>
+<style>
+  :root{
+    --paper:#F5F6F8;
+    --panel:#FFFFFF;
+    --ink:#1B1D22;
+    --ink-soft:#5A606B;
+    --line:#D8DCE2;
+    --line-soft:#E7EAEF;
+    --teal:#147D64;
+    --teal-dark:#0F5F4C;
+    --teal-tint:#E7F3EF;
+    --amber:#E0A83E;
+    --amber-tint:#FBEFCF;
+    --amber-line:#EAC875;
+    --red:#B4342B;
+    --red-tint:#FBECEA;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+    --sans:system-ui,-apple-system,"Segoe UI","Hiragino Kaku Gothic ProN","Noto Sans JP",Meiryo,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);-webkit-text-size-adjust:100%}
+  body{line-height:1.55}
+  .wrap{max-width:900px;margin:0 auto;padding:28px 18px 80px}
+
+  header.top{margin-bottom:22px}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--teal-dark);font-weight:600}
+  h1{font-size:clamp(22px,4.4vw,30px);letter-spacing:-.02em;margin:6px 0 4px;font-weight:800}
+  .sub{color:var(--ink-soft);font-size:14px;max-width:60ch}
+
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 16px 18px;margin-bottom:14px}
+  .panel > .head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:8px}
+  .panel .n{font-family:var(--mono);font-size:12px;font-weight:700;color:#fff;background:var(--ink);border-radius:6px;padding:2px 7px;margin-right:8px}
+  .panel h2{font-size:15px;font-weight:700;margin:0;display:flex;align-items:center}
+  .panel .hint{font-size:12px;color:var(--ink-soft)}
+
+  textarea{width:100%;font-family:var(--mono);font-size:12.5px;line-height:1.5;color:var(--ink);
+    background:#FBFCFD;border:1px solid var(--line);border-radius:9px;padding:10px 11px;resize:vertical;white-space:pre;overflow:auto}
+  textarea:focus{outline:2px solid var(--teal);outline-offset:1px;border-color:var(--teal)}
+  #header{min-height:52px}
+  #templates{min-height:96px}
+  #locations{min-height:120px}
+  .ta-note{font-size:11.5px;color:var(--ink-soft);margin-top:6px}
+  .ta-note code{font-family:var(--mono);background:var(--line-soft);padding:1px 5px;border-radius:4px;font-size:11px}
+
+  details.adv{margin-top:2px}
+  details.adv summary{cursor:pointer;font-size:12px;color:var(--teal-dark);font-weight:600;list-style:none}
+  details.adv summary::-webkit-details-marker{display:none}
+  details.adv summary::before{content:"▸ ";font-size:10px}
+  details.adv[open] summary::before{content:"▾ "}
+
+  .opts{display:flex;flex-wrap:wrap;gap:8px 18px;margin:2px 0 2px}
+  .opt{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--ink)}
+  .opt input{width:16px;height:16px;accent-color:var(--teal);margin:0}
+  .opt.disabled{color:var(--ink-soft);opacity:.55}
+  .opt select{font-family:var(--sans);font-size:13px;padding:5px 8px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--ink)}
+  .opt select:focus{outline:2px solid var(--teal);outline-offset:1px;border-color:var(--teal)}
+  .opt select:disabled{background:var(--line-soft);color:var(--ink-soft)}
+
+  .actionbar{display:flex;align-items:center;gap:12px;margin:4px 0 20px;flex-wrap:wrap}
+  button.run{font-family:var(--sans);font-size:15px;font-weight:700;color:#fff;background:var(--teal);border:none;
+    border-radius:10px;padding:12px 22px;cursor:pointer;transition:transform .06s ease,background .15s ease}
+  button.run:hover{background:var(--teal-dark)}
+  button.run:active{transform:translateY(1px)}
+  button.ghost{font-family:var(--sans);font-size:13px;font-weight:600;color:var(--teal-dark);background:transparent;
+    border:1px solid var(--line);border-radius:9px;padding:9px 14px;cursor:pointer}
+  button.ghost:hover{border-color:var(--teal);background:var(--teal-tint)}
+  .count{font-family:var(--mono);font-size:13px;color:var(--ink-soft)}
+  .count b{color:var(--ink);font-size:15px}
+
+  /* column map chips */
+  .map{display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 14px}
+  .chip{font-family:var(--mono);font-size:11.5px;border:1px solid var(--line);border-radius:20px;padding:4px 11px;background:#fff;color:var(--ink-soft)}
+  .chip b{color:var(--ink)}
+  .chip .col{color:var(--teal-dark);font-weight:700}
+  .chip.miss{border-color:var(--red);background:var(--red-tint);color:var(--red)}
+  .chip.miss b{color:var(--red)}
+
+  /* warnings */
+  .warns{margin:0 0 14px;border:1px solid var(--amber-line);background:var(--amber-tint);border-radius:10px;padding:10px 12px;font-size:13px}
+  .warns.err{border-color:var(--red);background:var(--red-tint)}
+  .warns h3{margin:0 0 4px;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink)}
+  .warns ul{margin:0;padding-left:18px}
+  .warns li{margin:2px 0}
+
+  /* preview */
+  .preview-wrap{border:1px solid var(--line);border-radius:11px;overflow:hidden;margin-bottom:14px;background:#fff}
+  .preview-scroll{overflow-x:auto}
+  table.pv{border-collapse:collapse;width:100%;font-size:12.5px}
+  table.pv th,table.pv td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line-soft);vertical-align:top;white-space:nowrap}
+  table.pv thead th{position:sticky;top:0;background:#F1F3F6;font-size:11px;letter-spacing:.03em;color:var(--ink-soft);font-weight:700;border-bottom:1px solid var(--line)}
+  table.pv td.idx{font-family:var(--mono);color:var(--ink-soft)}
+  table.pv td.title{white-space:normal;min-width:220px}
+  table.pv td .m{font-family:var(--mono)}
+  table.pv tr.groupsep td{background:var(--paper);height:6px;padding:0;border-bottom:1px solid var(--line)}
+  mark{background:var(--amber-tint);color:var(--ink);border-radius:3px;padding:0 3px;box-shadow:inset 0 -1px 0 var(--amber-line)}
+  td.chg{background:var(--amber-tint)}
+
+  /* output */
+  .out-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;flex-wrap:wrap}
+  .out-head h2{font-size:15px;margin:0}
+  .out-actions{display:flex;gap:8px}
+  #output{min-height:120px;background:#FBFCFD}
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);opacity:0;
+    background:var(--ink);color:#fff;font-size:13px;padding:10px 18px;border-radius:999px;pointer-events:none;transition:.2s ease}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  .empty{color:var(--ink-soft);font-size:13px;padding:22px 14px;text-align:center}
+
+  footer.note{margin-top:26px;font-size:12px;color:var(--ink-soft);border-top:1px solid var(--line);padding-top:14px}
+  footer.note b{color:var(--ink)}
+
+  @media (max-width:560px){
+    .wrap{padding:20px 12px 70px}
+    button.run{width:100%}
+    .actionbar{gap:10px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="eyebrow">求人原稿 · 勤務地展開</div>
+    <h1>原稿複製ツール</h1>
+    <p class="sub">1件のテンプレ原稿を、勤務地の数だけ複製します。差し替えるのは <b>職種名・勤務地番号・都道府県・市区町村</b> だけ。あとはそのままコピーします。</p>
+  </header>
+
+  <!-- 1. header -->
+  <section class="panel">
+    <div class="head">
+      <h2><span class="n">1</span>見出し行</h2>
+      <span class="hint">スプシの1行目（列見出し）を貼ると、列を自動検出します</span>
+    </div>
+    <textarea id="header" spellcheck="false" aria-label="見出し行"></textarea>
+    <div class="ta-note">列は<b>見出しの名前</b>で探すので、頭に空列があっても（AE/AFのズレがあっても）自動で合わせます。自分のスプシの見出しに差し替えてOK。</div>
+  </section>
+
+  <!-- 2. templates -->
+  <section class="panel">
+    <div class="head">
+      <h2><span class="n">2</span>テンプレ原稿</h2>
+      <span class="hint">複製元の行を貼付（複数行=複数テンプレ、それぞれ全勤務地に展開）</span>
+    </div>
+    <textarea id="templates" spellcheck="false" aria-label="テンプレ原稿"></textarea>
+    <div class="ta-note">スプシで原稿の行を選択してコピー→ここに貼付（タブ区切りのまま貼れます）。</div>
+  </section>
+
+  <!-- 3. locations -->
+  <section class="panel">
+    <div class="head">
+      <h2><span class="n">3</span>勤務地リスト</h2>
+      <span class="hint">1行1勤務地</span>
+    </div>
+    <textarea id="locations" spellcheck="false" aria-label="勤務地リスト"></textarea>
+    <div class="ta-note">
+      形式：<code>勤務地番号 [tab] 都道府県市区町村 [tab] タイトル用テキスト(任意)</code><br>
+      例：<code>3467457&#9;宮崎県日南市</code> → 職種名は「◯◯ 宮崎県日南市」になります。3列目を入れると、タイトルの勤務地だけ別テキストに差し替えできます。
+    </div>
+
+    <details class="adv" open>
+      <summary>差し替える項目・オプション</summary>
+      <div class="opts" style="margin-top:10px">
+        <label class="opt"><input type="checkbox" id="ck_title" checked> 職種名を差し替え</label>
+        <label class="opt"><input type="checkbox" id="ck_no" checked> 勤務地番号</label>
+        <label class="opt"><input type="checkbox" id="ck_pref" checked> 都道府県</label>
+        <label class="opt"><input type="checkbox" id="ck_city" checked> 市区町村</label>
+        <label class="opt"><input type="checkbox" id="ck_jis"> 都道府県JIS_cd（都道府県から自動）</label>
+      </div>
+      <div class="opts" style="align-items:center">
+        <label class="opt">職種名の形式：
+          <select id="title_mode">
+            <option value="space" selected>職種名 ＋ スペース ＋ 勤務地（例：ソフトバンクショップ店員 宮崎県日南市）</option>
+            <option value="paren">括弧内を差し替え（例：〜（仙台））</option>
+          </select>
+        </label>
+        <label class="opt" id="wrap_sep">区切り：
+          <select id="title_sep">
+            <option value=" " selected>半角スペース</option>
+            <option value="　">全角スペース</option>
+          </select>
+        </label>
+        <label class="opt disabled" id="wrap_append"><input type="checkbox" id="ck_append" checked> 括弧が無ければ末尾に追記</label>
+      </div>
+    </details>
+  </section>
+
+  <div class="actionbar">
+    <button class="run" id="run">行を生成</button>
+    <button class="ghost" id="sample">サンプルを読み込む</button>
+    <button class="ghost" id="clear">クリア</button>
+    <span class="count" id="count"></span>
+  </div>
+
+  <div class="map" id="map"></div>
+  <div id="warnbox"></div>
+
+  <div class="preview-wrap">
+    <div class="preview-scroll">
+      <div id="preview"><div class="empty">「行を生成」を押すと、ここに差し替え結果のプレビューが出ます。</div></div>
+    </div>
+  </div>
+
+  <section>
+    <div class="out-head">
+      <h2>出力（スプシに貼付）</h2>
+      <div class="out-actions">
+        <button class="ghost" id="copy">コピー</button>
+        <button class="ghost" id="download">.txt保存</button>
+      </div>
+    </div>
+    <textarea id="output" spellcheck="false" aria-label="出力" placeholder="生成した行がここに入ります（タブ区切り）。全選択してスプシに貼り付けてください。"></textarea>
+  </section>
+
+  <footer class="note">
+    <b>メモ：</b>勤務地番号を差し替えるとAirワーク側では住所が紐づくため、郵便番号列はこのツールでは触りません（テンプレの値のまま）。都道府県JIS_cdだけは希望すれば自動更新できます。<br>
+    列の対応が「未検出」になった場合は、見出し行が正しく貼られているか確認してください。
+  </footer>
+</div>
+
+<div class="toast" id="toast">コピーしました</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var PREF_CODE = {
+    "北海道":"01","青森県":"02","岩手県":"03","宮城県":"04","秋田県":"05","山形県":"06","福島県":"07",
+    "茨城県":"08","栃木県":"09","群馬県":"10","埼玉県":"11","千葉県":"12","東京都":"13","神奈川県":"14",
+    "新潟県":"15","富山県":"16","石川県":"17","福井県":"18","山梨県":"19","長野県":"20","岐阜県":"21",
+    "静岡県":"22","愛知県":"23","三重県":"24","滋賀県":"25","京都府":"26","大阪府":"27","兵庫県":"28",
+    "奈良県":"29","和歌山県":"30","鳥取県":"31","島根県":"32","岡山県":"33","広島県":"34","山口県":"35",
+    "徳島県":"36","香川県":"37","愛媛県":"38","高知県":"39","福岡県":"40","佐賀県":"41","長崎県":"42",
+    "熊本県":"43","大分県":"44","宮崎県":"45","鹿児島県":"46","沖縄県":"47"
+  };
+  var PREF_RE = /^(北海道|東京都|京都府|大阪府|.{2,3}?県)/;
+  var PREF_ANY = /(北海道|東京都|京都府|大阪府|.{2,3}?県)/;
+
+  var $ = function(id){ return document.getElementById(id); };
+
+  function colLetter(i){ var s="";i++;while(i>0){var m=(i-1)%26;s=String.fromCharCode(65+m)+s;i=Math.floor((i-1)/26);}return s; }
+  function esc(s){ return String(s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c];}); }
+
+  function normHead(c){ return (c||"").replace(/\s+/g,""); }
+
+  function detectCols(headerCells){
+    var idx = { title:-1, no:-1, pref:-1, city:-1, jis:-1 };
+    for(var i=0;i<headerCells.length;i++){
+      var h = normHead(headerCells[i]);
+      var low = h.toLowerCase();
+      if(idx.title<0 && (h.indexOf("職種名")>=0 || low.indexOf("(title)")>=0)) idx.title=i;
+      if(idx.no<0 && (h.indexOf("勤務地番号")>=0 || low.indexOf("working_location_id)")>=0)) idx.no=i;
+      var isJis = (low.indexOf("jis")>=0);
+      if(idx.jis<0 && h.indexOf("都道府県")>=0 && isJis) idx.jis=i;
+      if(idx.pref<0 && h.indexOf("都道府県")>=0 && !isJis) idx.pref=i;
+      if(idx.city<0 && (h.indexOf("市区町村")>=0 || low.indexOf("city_area")>=0)) idx.city=i;
+    }
+    return idx;
+  }
+
+  function splitPref(locStr){
+    var m = (locStr||"").match(PREF_RE);
+    if(!m) return { pref:"", city:locStr||"", ok:false };
+    var pref = m[0];
+    var city = locStr.slice(pref.length);
+    return { pref:pref, city:city, ok:true };
+  }
+
+  // parse a location line -> {no, loc, label}
+  function parseLocLine(line){
+    var raw = line.replace(/\u3000/g," ").replace(/\s+$/,"");
+    if(!raw.trim()) return null;
+    var parts = raw.split("\t").map(function(s){return s.trim();}).filter(function(s,i){ return true; });
+    // if there are tabs, trust them
+    if(raw.indexOf("\t")>=0){
+      parts = raw.split("\t").map(function(s){return s.trim();});
+      return { no:parts[0]||"", loc:parts[1]||"", label:parts[2]||"" };
+    }
+    // otherwise split leading number from the rest by whitespace
+    var m = raw.trim().match(/^(\S+)\s+(.+)$/);
+    if(!m) return { no:raw.trim(), loc:"", label:"" };
+    var rest = m[2].trim();
+    // if rest still has a big gap, treat last chunk as label
+    var m2 = rest.match(/^(.+?)\s{1,}(\S+)$/);
+    if(m2 && /[市区町村郡]/.test(m2[1])){
+      return { no:m[1], loc:m2[1].trim(), label:m2[2].trim() };
+    }
+    return { no:m[1], loc:rest, label:"" };
+  }
+
+  // remove a trailing location (paren group and/or 都道府県〜) from a title, keep the job-name base
+  function stripTrailingLocation(title){
+    var s = (title||"").replace(/\s+$/,"");
+    s = s.replace(/[（(][^（()）]*[)）]\s*$/,"").replace(/\s+$/,"");
+    var m = s.match(PREF_ANY);
+    if(m){ s = (m.index>0) ? s.slice(0,m.index).replace(/\s+$/,"") : ""; }
+    return s;
+  }
+
+  // format: 職種名 + 区切り + 勤務地
+  function spaceTitle(title, locText, sep){
+    var base = stripTrailingLocation(title);
+    if(!locText) return { text:base, html:esc(base), replaced:(base!==title) };
+    var text = base ? (base + sep + locText) : locText;
+    var html = (base ? esc(base)+esc(sep) : "") + "<mark>"+esc(locText)+"</mark>";
+    return { text:text, html:html, replaced:true };
+  }
+
+  // replace last (...) / （...） group. returns {html, text, replaced}
+  function swapTitle(title, label, appendIfNone){
+    var re = /[（(][^（()）]*[)）]/g;
+    var last=null, mm;
+    while((mm=re.exec(title))!==null){ last=mm; }
+    if(last){
+      var before = title.slice(0,last.index);
+      var after = title.slice(last.index+last[0].length);
+      var open = last[0].charAt(0);
+      var close = (open==="（")?"）":")";
+      var newParen = open + label + close;
+      return {
+        text: before + newParen + after,
+        html: esc(before) + open + "<mark>" + esc(label) + "</mark>" + close + esc(after),
+        replaced:true
+      };
+    }
+    if(appendIfNone && label){
+      return { text: title + "（" + label + "）",
+               html: esc(title) + "（<mark>" + esc(label) + "</mark>）", replaced:true };
+    }
+    return { text:title, html:esc(title), replaced:false };
+  }
+
+  function getTemplates(){
+    return $("templates").value.split(/\r?\n/).map(function(l){return l;}).filter(function(l){return l.trim()!=="";});
+  }
+  function getHeaderCells(){
+    var line = ($("header").value.split(/\r?\n/).filter(function(l){return l.trim()!=="";})[0])||"";
+    return line.split("\t");
+  }
+
+  var lastOutput = "";
+
+  function generate(){
+    var headerCells = getHeaderCells();
+    var idx = detectCols(headerCells);
+    var templates = getTemplates();
+    var locLines = $("locations").value.split(/\r?\n/);
+
+    var doTitle = $("ck_title").checked;
+    var doNo    = $("ck_no").checked;
+    var doPref  = $("ck_pref").checked;
+    var doCity  = $("ck_city").checked;
+    var doJis   = $("ck_jis").checked;
+    var appendIfNone = $("ck_append").checked;
+    var titleMode = $("title_mode").value;
+    var titleSep  = $("title_sep").value;
+
+    // column map
+    renderMap(idx, {title:doTitle,no:doNo,pref:doPref,city:doCity,jis:doJis});
+
+    var warns = [];
+    if(headerCells.length<=1) warns.push("見出し行が1列しか読めていません。スプシの1行目をタブ区切りで貼ってください。");
+    if(doTitle && idx.title<0) warns.push("「職種名」列が見つかりません。見出し行を確認してください。");
+    if(doNo && idx.no<0)   warns.push("「勤務地番号」列が見つかりません。");
+    if(doPref && idx.pref<0) warns.push("「勤務地都道府県」列が見つかりません。");
+    if(doCity && idx.city<0) warns.push("「勤務地市区町村」列が見つかりません。");
+    if(doJis && idx.jis<0)  warns.push("「勤務地都道府県JIS_cd」列が見つかりません。");
+    if(templates.length===0) warns.push("テンプレ原稿が空です。");
+
+    var locs = [];
+    for(var i=0;i<locLines.length;i++){
+      var p = parseLocLine(locLines[i]);
+      if(!p) continue;
+      if(!p.no){ warns.push("勤務地番号が読めない行があります: 「"+locLines[i].trim()+"」"); continue; }
+      var sp = splitPref(p.loc);
+      if(doPref && p.loc && !sp.ok) warns.push("都道府県を判定できませんでした: 「"+p.loc+"」（市区町村としてそのまま入ります）");
+      var jiscode = PREF_CODE[sp.pref] || "";
+      if(doJis && p.loc && sp.pref && !jiscode) warns.push("JISコード未対応の都道府県: 「"+sp.pref+"」");
+      locs.push({ no:p.no, loc:p.loc, label:(p.label||""), pref:sp.pref, city:sp.city, jis:jiscode });
+    }
+    if(locs.length===0) warns.push("勤務地リストが空、または全行が読めませんでした。");
+
+    // build rows
+    var outBlocks = [];
+    var pv = [];
+    for(var t=0;t<templates.length;t++){
+      var baseCells = templates[t].split("\t");
+      if(idx.title>=0 && idx.title>=baseCells.length && doTitle) warns.push("テンプレ"+(t+1)+"行目：職種名の列位置("+colLetter(idx.title)+")までセルがありません。");
+      var blockLines = [];
+      for(var l=0;l<locs.length;l++){
+        var cells = baseCells.slice();
+        while(cells.length < headerCells.length) cells.push("");
+        var lo = locs[l];
+        var titleObj = {text: idx.title>=0?(cells[idx.title]||""):"", html: esc(idx.title>=0?(cells[idx.title]||""):""), replaced:false};
+        if(doTitle && idx.title>=0){
+          if(titleMode==="space"){
+            var locText = lo.label || lo.loc;               // full 都道府県市区町村（3列目があれば優先）
+            titleObj = spaceTitle(cells[idx.title]||"", locText, titleSep);
+          }else{
+            var parenLabel = lo.label || lo.city || lo.loc; // 括弧内は市区町村ベース
+            titleObj = swapTitle(cells[idx.title]||"", parenLabel, appendIfNone);
+          }
+          cells[idx.title] = titleObj.text;
+        }
+        if(doNo && idx.no>=0)   cells[idx.no]   = lo.no;
+        if(doPref && idx.pref>=0 && lo.loc) cells[idx.pref] = lo.pref || lo.loc;
+        if(doCity && idx.city>=0 && lo.loc) cells[idx.city] = lo.city;
+        if(doJis && idx.jis>=0 && lo.jis)   cells[idx.jis]  = lo.jis;
+
+        blockLines.push(cells.join("\t"));
+        pv.push({
+          t:t+1,
+          titleHtml: (doTitle && idx.title>=0)? titleObj.html : esc(idx.title>=0?(cells[idx.title]||""):"—"),
+          titleChg: doTitle && idx.title>=0 && titleObj.replaced,
+          no: idx.no>=0?cells[idx.no]:"—", noChg: doNo && idx.no>=0,
+          pref: idx.pref>=0?cells[idx.pref]:"—", prefChg: doPref && idx.pref>=0 && !!lo.loc,
+          city: idx.city>=0?cells[idx.city]:"—", cityChg: doCity && idx.city>=0 && !!lo.loc,
+          jis: idx.jis>=0?cells[idx.jis]:"", jisChg: doJis && idx.jis>=0 && !!lo.jis,
+          groupStart: (l===0)
+        });
+      }
+      outBlocks.push(blockLines.join("\n"));
+    }
+
+    lastOutput = outBlocks.join("\n\n"); // blank line between template groups
+    $("output").value = lastOutput;
+
+    renderWarns(warns);
+    renderPreview(pv, doJis && idx.jis>=0);
+
+    var total = 0; for(var b=0;b<pv.length;b++) total++;
+    $("count").innerHTML = total>0 ? ("<b>"+total+"</b> 行を生成（テンプレ "+templates.length+" × 勤務地 "+locs.length+"）") : "";
+  }
+
+  function renderMap(idx, on){
+    var defs = [
+      {key:"title", label:"職種名", i:idx.title, on:on.title},
+      {key:"no",    label:"勤務地番号", i:idx.no, on:on.no},
+      {key:"pref",  label:"都道府県", i:idx.pref, on:on.pref},
+      {key:"city",  label:"市区町村", i:idx.city, on:on.city},
+      {key:"jis",   label:"JIS_cd", i:idx.jis, on:on.jis}
+    ];
+    var html = "";
+    for(var k=0;k<defs.length;k++){
+      var d=defs[k];
+      if(!d.on) continue;
+      if(d.i>=0){
+        html += '<span class="chip"><b>'+esc(d.label)+'</b> → <span class="col">'+colLetter(d.i)+'列</span> <span style="opacity:.6">('+(d.i+1)+')</span></span>';
+      }else{
+        html += '<span class="chip miss"><b>'+esc(d.label)+'</b> 未検出</span>';
+      }
+    }
+    $("map").innerHTML = html;
+  }
+
+  function renderWarns(warns){
+    var box = $("warnbox");
+    if(!warns.length){ box.innerHTML=""; return; }
+    var hard = warns.some(function(w){return /見つかりません|空です|1列しか/.test(w);});
+    var lis = warns.map(function(w){return "<li>"+esc(w)+"</li>";}).join("");
+    box.innerHTML = '<div class="warns'+(hard?" err":"")+'"><h3>'+(hard?"要確認":"注意")+'</h3><ul>'+lis+'</ul></div>';
+  }
+
+  function renderPreview(pv, showJis){
+    var el = $("preview");
+    if(!pv.length){ el.innerHTML = '<div class="empty">生成対象がありません。テンプレ原稿と勤務地リストを確認してください。</div>'; return; }
+    var head = '<tr><th>#</th><th>職種名（差替後）</th><th>勤務地番号</th><th>都道府県</th><th>市区町村</th>'+(showJis?'<th>JIS</th>':'')+'</tr>';
+    var rows = "";
+    var n=0;
+    for(var i=0;i<pv.length;i++){
+      var r=pv[i];
+      if(r.groupStart && i>0){ rows += '<tr class="groupsep"><td colspan="'+(showJis?6:5)+'"></td></tr>'; }
+      n++;
+      rows += '<tr>'
+        + '<td class="idx">'+n+'</td>'
+        + '<td class="title'+(r.titleChg?" chg":"")+'">'+r.titleHtml+'</td>'
+        + '<td class="'+(r.noChg?"chg":"")+'"><span class="m">'+esc(r.no)+'</span></td>'
+        + '<td class="'+(r.prefChg?"chg":"")+'">'+esc(r.pref)+'</td>'
+        + '<td class="'+(r.cityChg?"chg":"")+'">'+esc(r.city)+'</td>'
+        + (showJis?('<td class="'+(r.jisChg?"chg":"")+'"><span class="m">'+esc(r.jis)+'</span></td>'):'')
+        + '</tr>';
+    }
+    el.innerHTML = '<table class="pv"><thead>'+head+'</thead><tbody>'+rows+'</tbody></table>';
+  }
+
+  function toast(msg){
+    var t=$("toast"); t.textContent=msg; t.classList.add("show");
+    clearTimeout(t._to); t._to=setTimeout(function(){t.classList.remove("show");},1400);
+  }
+
+  function syncTitleOpts(){
+    var m = $("title_mode").value;
+    $("title_sep").disabled = (m!=="space");
+    $("ck_append").disabled = (m!=="paren");
+    $("wrap_sep").classList.toggle("disabled", m!=="space");
+    $("wrap_append").classList.toggle("disabled", m!=="paren");
+  }
+  $("title_mode").addEventListener("change", function(){ syncTitleOpts(); if($("output").value) generate(); });
+  syncTitleOpts();
+
+  $("run").addEventListener("click", generate);
+
+  $("copy").addEventListener("click", function(){
+    var v = $("output").value;
+    if(!v){ toast("出力が空です"); return; }
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(v).then(function(){toast("コピーしました");},function(){fallbackCopy();});
+    }else{ fallbackCopy(); }
+    function fallbackCopy(){ $("output").select(); try{document.execCommand("copy");toast("コピーしました");}catch(e){toast("コピーできませんでした");} }
+  });
+
+  $("download").addEventListener("click", function(){
+    var v=$("output").value; if(!v){toast("出力が空です");return;}
+    var d=new Date();
+    var ymd=d.getFullYear()+String(d.getMonth()+1).padStart(2,"0")+String(d.getDate()).padStart(2,"0");
+    var blob=new Blob([v],{type:"text/plain;charset=utf-8"});
+    var a=document.createElement("a");
+    a.href=URL.createObjectURL(blob); a.download="求人複製_"+ymd+".txt";
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
+    toast("保存しました");
+  });
+
+  $("clear").addEventListener("click", function(){
+    $("templates").value=""; $("locations").value=""; $("output").value="";
+    $("preview").innerHTML='<div class="empty">「行を生成」を押すと、ここに差し替え結果のプレビューが出ます。</div>';
+    $("map").innerHTML=""; $("warnbox").innerHTML=""; $("count").innerHTML="";
+    toast("クリアしました");
+  });
+
+  // ---- sample (self-consistent 36-col example) ----
+  var SAMPLE_HEADER = [
+    "求人番号(job_offer_id)","承認状況(approval_status)","掲載状況(publish_status)","クライアントコード(client_code)",
+    "雇用形態CD(job_type)","雇用形態(job_type_jp)","職種名(title)","職種1CD(occupation_id_1)","職種1(occupation_id_jp1)",
+    "職種2CD(occupation_id_2)","職種2(occupation_id_jp2)","職種3CD(occupation_id_3)","職種3(occupation_id_jp3)",
+    "仕事内容(description)","仕事内容の特徴（お客様との対話）ID","仕事内容の特徴（お客様との対話）",
+    "仕事内容の特徴（仕事のスタイル）ID","仕事内容の特徴（仕事のスタイル）","仕事内容の特徴（仕事の環境）ID","仕事内容の特徴（仕事の環境）",
+    "仕事内容の特徴（勤務地）ID","仕事内容の特徴（勤務地）","仕事内容の特徴（業務のスタイル）ID","仕事内容の特徴（業務のスタイル）",
+    "仕事内容の特徴（力仕事）ID","仕事内容の特徴（力仕事）","仕事内容の特徴（作業内容）ID","仕事内容の特徴（作業内容）",
+    "勤務地種別CD(remote_flg)","勤務地種別(remote_flg_jp)","勤務地番号(working_location_id)","勤務地名(working_location_id_jp)",
+    "勤務地郵便番号(working_location_postcode)","勤務地都道府県JIS_cd(working_location_prefecture_jis_cd)",
+    "勤務地都道府県(working_location_prefecture)","勤務地市区町村(working_location_city_area)"
+  ];
+  var SAMPLE_TEMPLATE = [
+    "11078282","03","02","1779210","4","正社員","ソフトバンクショップ店員 宮城県仙台市青葉区","f8431","マーケティング戦略企画",
+    "68be2","インバウンドコールスタッフ","4e64b","一般事務","（ここに長い仕事内容本文。複製時はそのままコピーされます）",
+    "BG4QK","お客様との対話が多い仕事","BT24V","デスクワークが多い","","","","","","","","","KT64E","マニュアル通りの仕事",
+    "0","勤務地を指定する","3429892","株式会社サンプル 仙台支店","9800811","04","宮城県","仙台市青葉区一番町"
+  ];
+  var SAMPLE_LOCATIONS =
+    "3467457\t宮崎県日南市\n"+
+    "3355001\t鹿児島県鹿児島市\n"+
+    "3467520\t宮城県黒川郡大和町\n"+
+    "3514478\t宮城県東松島市";
+
+  $("sample").addEventListener("click", function(){
+    $("header").value = SAMPLE_HEADER.join("\t");
+    $("templates").value = SAMPLE_TEMPLATE.join("\t");
+    $("locations").value = SAMPLE_LOCATIONS;
+    generate();
+    toast("サンプルを読み込みました");
+  });
+
+  // load sample on first open so it's ready to try
+  $("sample").click();
+})();
+</script>
+</body>
+</html>
